@@ -251,7 +251,12 @@ Liveness probe. Returns `200 OK` whenever the process is running.
 
 ### `GET /api/v1/health/ready`
 
-Readiness probe. Returns `503` when `DATABASE_URL` is not configured (expected until Task 3).
+Readiness probe. Performs a lightweight database connectivity check (`SELECT 1`) using the configured `DATABASE_URL`.
+
+Returns `503` when:
+
+- `DATABASE_URL` is not configured, or
+- the database is unreachable / unavailable.
 
 **Response — 503 (DATABASE_URL empty)**
 
@@ -263,7 +268,17 @@ Readiness probe. Returns `503` when `DATABASE_URL` is not configured (expected u
 }
 ```
 
-**Response — 200 (DATABASE_URL set)**
+**Response — 503 (database unavailable)**
+
+```json
+{
+  "status": "degraded",
+  "checks": { "database": "database unavailable" },
+  "timestamp": "2026-10-20T05:16:30.123456Z"
+}
+```
+
+**Response — 200 (DATABASE_URL set and reachable)**
 
 ```json
 {
