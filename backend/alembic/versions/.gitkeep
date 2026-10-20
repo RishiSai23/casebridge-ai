@@ -1,0 +1,4 @@
+# Alembic generated migration versions
+# Each file in this directory represents one schema migration.
+# Do not modify existing files; create new migrations with:
+#   alembic revision --autogenerate -m "your description"
