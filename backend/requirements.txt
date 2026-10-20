@@ -1,0 +1,31 @@
+# CaseBridge AI — Backend Python dependencies
+#
+# Install:  pip install -r requirements.txt
+# Python:   3.10+
+#
+# Pin major.minor for all direct dependencies to keep builds reproducible.
+# Do NOT pin patch versions — allow security-fix updates within the minor.
+
+# --------------------------------------------------------------------------- #
+# Web framework
+# --------------------------------------------------------------------------- #
+fastapi>=0.115,<0.116
+# ASGI server — used in development; replace with gunicorn+uvicorn in production
+uvicorn[standard]>=0.32,<0.33
+
+# --------------------------------------------------------------------------- #
+# Configuration and validation
+# --------------------------------------------------------------------------- #
+pydantic>=2.9,<3.0
+pydantic-settings>=2.6,<3.0
+# Reads .env files automatically when pydantic-settings loads Settings
+python-dotenv>=1.0,<2.0
+
+# --------------------------------------------------------------------------- #
+# Database — ORM, migrations and PostgreSQL driver
+# --------------------------------------------------------------------------- #
+sqlalchemy>=2.0,<3.0
+# asyncpg: high-performance async PostgreSQL driver (required for SQLAlchemy async)
+asyncpg>=0.30,<1.0
+# Alembic: schema migration tool; must match SQLAlchemy major version
+alembic>=1.14,<2.0
