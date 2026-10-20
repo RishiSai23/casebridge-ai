@@ -87,3 +87,23 @@ class InstitutionSummary(BaseModel):
     name: str
     aicte_institution_id: str | None = None
     state: str | None = None
+
+
+class InstitutionList(BaseModel):
+    """Paginated list of institutions returned by GET /institutions."""
+
+    items: list[InstitutionRead] = Field(
+        description="Institutions on the requested page."
+    )
+    total: int = Field(
+        ge=0,
+        description="Total number of institutions matching the search criteria.",
+    )
+    limit: int = Field(
+        ge=1,
+        description="Maximum number of items on a page (page size).",
+    )
+    offset: int = Field(
+        ge=0,
+        description="Number of matching institutions skipped before this page.",
+    )
