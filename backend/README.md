@@ -147,7 +147,7 @@ Copy-Item .env.example .env
 |---|---|---|
 | `APP_ENV` | `development` | `development` \| `staging` \| `production` |
 | `CORS_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Comma-separated allowed frontend origins |
-| `DATABASE_URL` | _(empty)_ | `postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DBNAME` |
+| `DATABASE_URL` | `postgresql+asyncpg://casebridge_dev:change_me_local_dev@localhost:5432/casebridge_dev` | `postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DBNAME` |
 | `AI_SIMILARITY_THRESHOLD` | `0.75` | Min cosine similarity to flag complaint overlap |
 | `AI_MAX_OVERLAP_CANDIDATES` | `10` | Max candidates returned per complaint |
 | `LOG_LEVEL` | `INFO` | Python log level |
@@ -170,7 +170,10 @@ pip install -r requirements.txt
 
 # 3. Configure environment
 Copy-Item .env.example .env
-# Edit .env — set DATABASE_URL to your local PostgreSQL instance
+# Edit .env if needed (defaults match the repository root docker-compose PostgreSQL service)
+
+# Optional: start local PostgreSQL first (from repository root)
+# docker compose up -d postgres
 
 # 4. Start the development server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
