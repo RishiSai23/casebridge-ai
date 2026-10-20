@@ -49,6 +49,16 @@ class ComplaintCaseBase(BaseModel):
         description="Resolution deadline (UTC). Null if not yet scheduled.",
     )
 
+    @field_validator("received_at", "due_at")
+    @classmethod
+    def require_timezone_aware_datetime(cls, v: datetime | None, info: object) -> datetime | None:
+        if v is None:
+            return None
+        if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
+            field_name = getattr(info, "field_name", "datetime")
+            raise ValueError(f"{field_name} must include timezone information")
+        return v
+
 
 class ComplaintCaseCreate(ComplaintCaseBase):
     """Payload for creating a new ComplaintCase.
@@ -66,10 +76,13 @@ class ComplaintCaseCreate(ComplaintCaseBase):
         description="Human-readable unique reference (e.g. 'AICTE-PGRS-2026-001234').",
     )
 
-    @field_validator("subject", "case_reference")
+    @field_validator("subject", "case_reference", mode="before")
     @classmethod
     def strip_strings(cls, v: str) -> str:
-        return v.strip()
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("value must not be empty after trimming whitespace")
+        return stripped
 
 
 class ComplaintCaseRead(ComplaintCaseBase):

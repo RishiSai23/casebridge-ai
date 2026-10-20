@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.db.models.enums import RelationshipStatus, RelationshipType
 
@@ -38,6 +38,8 @@ class CaseRelationshipCreate(CaseRelationshipBase):
     confidence_score and evidence are NOT accepted at creation time when
     submitted via the API; they are populated by the AI matching service.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     case_a_id: UUID = Field(description="One of the two related cases (order does not matter).")
     case_b_id: UUID = Field(description="The other related case (order does not matter).")

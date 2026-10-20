@@ -58,10 +58,13 @@ class InstitutionCreate(InstitutionBase):
     caller — it will be derived from name in the service layer.
     """
 
-    @field_validator("name")
+    @field_validator("name", mode="before")
     @classmethod
     def strip_name(cls, v: str) -> str:
-        return v.strip()
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name must not be empty after trimming whitespace")
+        return stripped
 
 
 class InstitutionRead(InstitutionBase):

@@ -27,10 +27,21 @@ class BureauBase(BaseModel):
     )
     is_active: bool = Field(default=True)
 
-    @field_validator("code")
+    @field_validator("code", mode="before")
     @classmethod
     def uppercase_code(cls, v: str) -> str:
-        return v.strip().upper()
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("code must not be empty after trimming whitespace")
+        return stripped.upper()
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name must not be empty after trimming whitespace")
+        return stripped
 
 
 class BureauCreate(BureauBase):
