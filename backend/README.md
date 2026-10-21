@@ -37,12 +37,15 @@ backend/
 │   │       ├── case_relationship.py
 │   │       ├── coordination_action.py
 │   │       └── audit_log.py
-│   └── schemas/
-│       ├── health.py          # Health endpoint response models
-│       ├── institution.py
-│       ├── complaint_case.py
-│       ├── bureau.py
-│       └── case_relationship.py
+│   ├── schemas/
+│   │   ├── health.py          # Health endpoint response models
+│   │   ├── institution.py
+│   │   ├── complaint_case.py
+│   │   ├── case_event.py      # Case timeline read schema
+│   │   ├── bureau.py
+│   │   └── case_relationship.py
+│   └── services/
+│       └── case_lifecycle.py  # Status transition policy and CaseEvent recording
 └── tests/
 ```
 
@@ -251,7 +254,12 @@ Liveness probe. Returns `200 OK` whenever the process is running.
 
 ### `GET /api/v1/health/ready`
 
-Readiness probe. Returns `503` when `DATABASE_URL` is not configured (expected until Task 3).
+Readiness probe. Performs a lightweight database connectivity check (`SELECT 1`) using the configured `DATABASE_URL`.
+
+Returns `503` when:
+
+- `DATABASE_URL` is not configured, or
+- the database is unreachable / unavailable.
 
 **Response — 503 (DATABASE_URL empty)**
 
@@ -263,7 +271,17 @@ Readiness probe. Returns `503` when `DATABASE_URL` is not configured (expected u
 }
 ```
 
-**Response — 200 (DATABASE_URL set)**
+**Response — 503 (database unavailable)**
+
+```json
+{
+  "status": "degraded",
+  "checks": { "database": "database unavailable" },
+  "timestamp": "2026-10-20T05:16:30.123456Z"
+}
+```
+
+**Response — 200 (DATABASE_URL set and reachable)**
 
 ```json
 {
@@ -275,13 +293,14 @@ Readiness probe. Returns `503` when `DATABASE_URL` is not configured (expected u
 
 ---
 
-## Planned future modules (Task 3+)
+## API Module Status
 
-| Module | Prefix | Responsibility |
-|---|---|---|
-| Institutions | `/institutions` | CRUD for institution registry |
-| Complaints | `/complaints` | CRUD for complaint cases |
-| Bureaus | `/bureaus` | Bureau management |
-| Relationships | `/relationships` | Case overlap detection and review |
-| Coordination | `/coordination` | Cross-bureau action queue |
-| Audit | `/audit` | Action history |
+| Module | Prefix | Status | Responsibility |
+|---|---|---|---|
+| Health | `/health` | Implemented | Liveness and readiness probes. |
+| Institutions | `/institutions` | Implemented | CRUD for institution registry (create, list with search/filter/pagination, get by ID). |
+| Complaints | `/complaints` | Implemented (lifecycle/events awaiting manual verification) | CRUD plus enforced status-transition policy (`app/services/case_lifecycle.py`), transactional append-only `CaseEvent` logging on create/PATCH, and `GET /complaints/{case_id}/events` chronological timeline. |
+| Bureaus | `/bureaus` | Planned | Bureau management. |
+| Relationships | `/relationships` | Planned | Case overlap detection and review. |
+| Coordination | `/coordination` | Planned | Cross-bureau action queue. |
+| Audit | `/audit` | Planned | Action history. |

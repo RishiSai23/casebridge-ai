@@ -32,9 +32,9 @@ Authoritative progress and submission readiness are tracked in [progress.md](pro
 | **Backend Core & Health Probes** | Verified | FastAPI application factory, CORS middleware, Pydantic BaseSettings, `/api/v1/health` (liveness), and `/api/v1/health/ready` (readiness). |
 | **Relational Database Domain Models** | Verified | Complete SQLAlchemy 2.0 ORM models for all 9 domain entities: `users`, `institutions`, `bureaus`, `complaint_cases`, `case_assignments`, `case_events`, `case_relationships`, `coordination_actions`, and `audit_logs`. |
 | **Schema Migrations (Alembic)** | Verified | Initial migration `20261020_2f4e9a1b8c72_initial_domain_schema.py` committed and verified via `alembic history`. |
-| **Automated Tests** | Verified (7 passed) | Pytest test suite covering health probes, metadata registration completeness, and Pydantic schema validation. |
+| **Automated Tests** | Verified (7 passed historical; user-reported: 120 tests passed) | Pytest test suite covering health probes, metadata registration completeness, and Pydantic schema validation; tests have not been re-executed since merge `6dd0d08`. User-reported: backend test suite passed with 120 tests, and navigation validator passed (`python scripts/validate_navigation.py`). Results reported by the user, not executed by this agent. |
 | **Local PostgreSQL Database** | Docker Compose configured | `docker-compose.yml` for PostgreSQL 16 ready; container startup requires Docker Desktop runtime. |
-| **Domain CRUD Endpoints & Services** | Planned (Task 3+) | Routes for institutions, complaints, overlap matching, and coordination actions to be implemented next. |
+| **Domain CRUD Endpoints & Services** | In Progress (partial) | Institution CRUD and complaint case CRUD (`POST`, `GET` list, `GET` by ID, `PATCH`, `GET` timeline events) implemented; complaint lifecycle/event service (`app/services/case_lifecycle.py`) integrated on complaint routes — awaiting manual test verification; institution normalized-name logic remains inline in routes; bureau, relationship, and coordination APIs not yet implemented. |
 | **Frontend Application** | External / Planned | Planned for integration under `frontend/` by team members. |
 
 ---

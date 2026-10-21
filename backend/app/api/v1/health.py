@@ -8,7 +8,7 @@ GET /api/v1/health
 
 GET /api/v1/health/ready
     Readiness probe — checks whether critical subsystems (currently: database
-    URL configuration) are reachable.  Returns HTTP 200 with status="ready"
+    configuration + connectivity) are reachable.  Returns HTTP 200 with status="ready"
     when all checks pass, or HTTP 503 with status="degraded" when any check
     fails.  The individual check results are always included in the body so
     the caller can see exactly what failed.
@@ -19,8 +19,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Response, status
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import get_settings
+from app.db.session import get_engine
 from app.schemas.health import HealthResponse, ReadinessResponse
 
 router = APIRouter(prefix="/health", tags=["Health"])
@@ -63,25 +66,31 @@ def health_liveness() -> HealthResponse:
         }
     },
 )
-def health_readiness(response: Response) -> ReadinessResponse:
+async def health_readiness(response: Response) -> ReadinessResponse:
     """Run lightweight readiness checks and return an aggregated result.
 
     Current checks
     --------------
     database
-        Verifies that DATABASE_URL is configured (non-empty).  An actual
-        connection attempt will be added in the database integration task.
+        Verifies that DATABASE_URL is configured and that PostgreSQL is
+        reachable with a lightweight query.
     """
     settings = get_settings()
     checks: dict[str, str] = {}
 
     # --- database check -------------------------------------------------
-    # Phase 1: confirm the URL is configured.
-    # Phase 2 (future): attempt a lightweight async ping to the DB.
-    if settings.DATABASE_URL:
-        checks["database"] = "ok"
-    else:
+    try:
+        engine = get_engine()
+    except ValueError:
         checks["database"] = "DATABASE_URL not configured"
+    else:
+        try:
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            checks["database"] = "ok"
+        except (SQLAlchemyError, OSError, TimeoutError):
+            # Do not expose connection details in readiness responses.
+            checks["database"] = "database unavailable"
 
     # Derive overall status from individual check results.
     overall: str = (

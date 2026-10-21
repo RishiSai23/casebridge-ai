@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.db.models.enums import CasePriority, CaseStatus
 from app.schemas.institution import InstitutionSummary
@@ -113,3 +113,89 @@ class ComplaintCaseSummary(BaseModel):
     subject: str
     status: CaseStatus
     priority: CasePriority
+
+
+class ComplaintCaseUpdate(BaseModel):
+    """Payload for PATCH /api/v1/complaints/{case_id}.
+
+    Every field is optional so callers update only the fields that changed.
+    Omitted fields are distinguished from explicitly provided nulls via
+    ``model_dump(exclude_unset=True)`` — this matters for nullable fields
+    such as ``due_at``, where an explicit ``null`` means "clear the value".
+    Unexpected fields (including server-controlled ones) are rejected with
+    HTTP 422 by the strict schema.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    subject: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Short subject line of the complaint.",
+    )
+    description: str | None = Field(
+        default=None,
+        description="Full complaint description.",
+    )
+    category: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional complaint category (e.g. 'fee_refund').",
+    )
+    priority: CasePriority | None = Field(
+        default=None,
+        description="low | medium | high | critical",
+    )
+    status: CaseStatus | None = Field(
+        default=None,
+        description="open | under_review | pending_info | escalated | resolved | closed | withdrawn",
+    )
+    due_at: datetime | None = Field(
+        default=None,
+        description="Resolution deadline (UTC). Explicit null clears the value.",
+    )
+
+    @field_validator("subject", mode="before")
+    @classmethod
+    def strip_subject(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("subject must not be empty after trimming whitespace")
+        return stripped
+
+    @field_validator("due_at")
+    @classmethod
+    def require_timezone_aware_due_at(cls, v: datetime | None) -> datetime | None:
+        if v is None:
+            return None
+        if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
+            raise ValueError("due_at must include timezone information")
+        return v
+
+    @model_validator(mode="after")
+    def reject_empty_payload(self) -> "ComplaintCaseUpdate":
+        if not self.model_fields_set:
+            raise ValueError("PATCH payload must include at least one field to update")
+        return self
+
+
+class ComplaintCaseList(BaseModel):
+    """Paginated list of complaint cases returned by GET /complaints."""
+
+    items: list[ComplaintCaseRead] = Field(
+        description="Complaint cases on the requested page."
+    )
+    total: int = Field(
+        ge=0,
+        description="Total number of complaint cases matching the filters.",
+    )
+    limit: int = Field(
+        ge=1,
+        description="Maximum number of items on a page (page size).",
+    )
+    offset: int = Field(
+        ge=0,
+        description="Number of matching complaint cases skipped before this page.",
+    )

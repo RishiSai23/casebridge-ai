@@ -8,6 +8,7 @@ The `backend/app/schemas/` directory defines Pydantic v2 data models for request
 backend/app/schemas/
 ├── __init__.py                # Makes schemas a Python package
 ├── bureau.py                  # Schemas for Bureau resources (create, read)
+├── case_event.py              # Read schema for append-only case timeline events
 ├── case_relationship.py       # Schemas for CaseRelationship resources and validation
 ├── complaint_case.py          # Schemas for ComplaintCase lifecycle and summaries
 ├── health.py                  # Schemas for health and readiness responses
@@ -20,8 +21,9 @@ backend/app/schemas/
 |---|---|
 | `__init__.py` | Marks `schemas` as a Python package. |
 | `bureau.py` | Defines `BureauBase`, `BureauCreate`, and `BureauRead` schemas with uppercase code validation. |
+| `case_event.py` | Defines `CaseEventRead` for the chronological timeline endpoint (`GET /complaints/{case_id}/events`). |
 | `case_relationship.py` | Defines `CaseRelationshipBase`, `CaseRelationshipCreate` (enforcing distinct cases), and `CaseRelationshipRead` schemas. |
-| `complaint_case.py` | Defines `ComplaintCaseBase`, `ComplaintCaseCreate`, and `ComplaintCaseRead` schemas enforcing timezone-aware timestamps. |
+| `complaint_case.py` | Defines `ComplaintCaseBase`, `ComplaintCaseCreate`, `ComplaintCaseUpdate`, `ComplaintCaseRead`, and list schemas enforcing timezone-aware timestamps. |
 | `health.py` | Defines `HealthResponse` and `ReadinessResponse` schemas for health endpoints. |
 | `institution.py` | Defines `InstitutionBase`, `InstitutionCreate` (with whitespace stripping), `InstitutionRead`, and `InstitutionSummary` schemas. |
 | `schemas.md` | Documents schema conventions, validation behaviors, and boundary isolation. |
