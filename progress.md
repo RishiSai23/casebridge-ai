@@ -28,9 +28,9 @@
 | **Backend Core Architecture** | Complete (`100%`) | FastAPI app factory, CORS configuration, Pydantic BaseSettings, `/api/v1/health` and `/api/v1/health/ready` endpoints active. Health route tests included in the user-reported 120-test suite (not independently executed by this agent). |
 | **Database Domain Models** | Complete (`100%`) | 9 SQLAlchemy 2.0 ORM models (`users`, `institutions`, `bureaus`, `complaint_cases`, `case_assignments`, `case_events`, `case_relationships`, `coordination_actions`, `audit_logs`). Model/table registration tests included in the user-reported 120-test suite (not independently executed by this agent). |
 | **Database Migrations** | Complete (`100%`) | Initial Alembic migration `2f4e9a1b8c72` committed and verified via offline Alembic CLI. |
-| **Automated Testing Baseline** | Complete (`100%`) | Full backend pytest suite passes with 120 tests covering health routes, table registration, schema constraints, and complaint-case endpoints per latest user-reported results (not independently executed by this agent). |
-| **Docker Compose PostgreSQL** | Ready (`100%`) | PostgreSQL 16 container definition configured with persistent volume and health check; runtime pending Docker Desktop availability. |
-| **Domain Services & REST APIs** | In Progress (`50%`) | Institution and complaint case CRUD routes implemented and mounted (`POST/GET/GET-by-id` for institutions; `POST/GET/GET-by-id/PATCH` for complaints). Service layer (`app/services/`) empty; bureau, relationship, and coordination APIs not yet implemented. |
+| **Automated Testing Baseline** | Complete (100%) | Latest user-reported full backend pytest suite: 191 passed, 313 warnings in 2.53s. Focused lifecycle/event/complaint endpoint suite: 107 passed, 217 warnings in 2.10s. Navigation validation and `git diff --check` passed. Live PostgreSQL behavior remains unverified. |
+| **Docker Compose PostgreSQL** | Configuration complete; live verification pending | PostgreSQL 16 container definition includes a persistent volume and health check. Runtime, live database connectivity, and migration execution have not been verified. |
+| **Domain Services & REST APIs** | In Progress (~55%) | Institution CRUD and complaint CRUD routes are implemented. Complaint lifecycle management, status-transition validation, event staging, and the chronological case timeline are implemented and covered by passing automated tests. Institution normalized-name logic remains inline in the route; a dedicated complaint CRUD service layer, bureau assignment, relationship, and coordination APIs remain pending. |
 | **AI Overlap Intelligence Engine** | Planned (`0%`) | Config parameters established (`AI_SIMILARITY_THRESHOLD`); vector/text matching service to be implemented. |
 | **Frontend Dashboard & UI** | Planned (`0%`) | External integration designated for `frontend/` directory. |
 
@@ -68,14 +68,22 @@
 
 ### 3. Complaint Registration & Tracking
 - [x] ORM model for `complaint_cases` table with controlled `CaseStatus` and `CasePriority`.
+
 - [x] Pydantic schemas: `ComplaintCaseBase`, `ComplaintCaseCreate`, `ComplaintCaseRead`, `ComplaintCaseUpdate`, `ComplaintCaseSummary`, `ComplaintCaseList`.
-- [ ] Complaint service layer — `backend/app/services/` contains no service module; case reference and status initialization are handled in the route handler.
+
+- [ ] Complaint CRUD service layer — a separate service abstraction for complaint CRUD remains pending. Lifecycle logic is implemented in `backend/app/services/case_lifecycle.py`.
+
 - [x] REST API endpoints (`POST /api/v1/complaints`, `GET /api/v1/complaints`, `GET /api/v1/complaints/{id}`, `PATCH /api/v1/complaints/{id}`) — implemented in `backend/app/api/v1/complaints.py`, mounted in `backend/app/api/v1/router.py`. Duplicate `case_reference` returns HTTP 409; missing institution returns HTTP 404.
+
 - [ ] Automatic case-reference generation — pending; case references are caller-supplied.
+
 - [x] Caller-supplied case reference validation and uniqueness — `case_reference` is a unique caller-supplied field (e.g. `AICTE-PGRS-2026-001234`), enforced unique at the database level.
-- [x] Timestamp and protected-field handling on PATCH — `PATCH` manages `closed_at` on transitions to/from terminal statuses (`closed`, `withdrawn`); protected fields (`id`, `case_reference`, `institution_id`, `received_at`, `closed_at`, timestamps) cannot be changed via `PATCH`.
-- [ ] Explicit status-transition rules and full lifecycle state machine — pending.
-- [ ] Event logging and chronological case history — `CaseEvent` ORM model exists but no `CaseEvent` API route, service hook, or timeline endpoint (`GET /api/v1/complaints/{id}/events`) is implemented.
+
+- [x] Timestamp and protected-field handling on PATCH — `PATCH` manages `closed_at` on transitions to and from terminal statuses (`closed`, `withdrawn`); protected fields (`id`, `case_reference`, `institution_id`, `received_at`, `closed_at`, timestamps) cannot be changed via `PATCH`.
+
+- [x] Explicit status-transition rules and lifecycle state machine — implemented in `backend/app/services/case_lifecycle.py` and covered by passing automated tests. Invalid transitions return HTTP 422; same-status PATCH requests are idempotent.
+
+- [x] Event logging and chronological case history — event staging for complaint creation and status/priority changes is implemented and covered by passing automated tests. `GET /api/v1/complaints/{case_id}/events` provides the chronological timeline.
 
 ### 4. Case Assignments & Transfers
 - [x] ORM model for `case_assignments` table with partial unique index for single active assignment.
@@ -212,29 +220,48 @@
 
 ## 5. In-Progress Deliverables
 
-- **CRUD API Endpoints & Service Layer (Task 3):**
-  - Institution CRUD routes (`POST`, `GET` list, `GET` by ID) implemented and mounted; complaint case CRUD routes (`POST`, `GET` list, `GET` by ID, `PATCH`) implemented and mounted.
-  - Service layer (`backend/app/services/`) is empty — normalized name generation, case reference handling, and status lifecycle logic live inline in route handlers rather than in a dedicated service module.
-  - Bureau, case relationship, case assignment, case event, and coordination action API routes not yet implemented.
-  - Adding database transaction handling and service tests still pending.
+- **Complaint Lifecycle & Event Timeline — implementation and automated verification complete**
+  - Implemented status-transition validation, `closed_at` management, transactional event staging on complaint creation and status/priority changes, and the chronological timeline endpoint.
+  - Added `CaseEventRead`, the `case_lifecycle.py` service, and lifecycle/event regression tests.
+  - Focused tests: 107 passed, 217 warnings in 2.10s.
+  - Full backend suite: 191 passed, 313 warnings in 2.53s.
+  - Navigation validation and `git diff --check` passed.
+  - Live PostgreSQL/Docker behavior remains unverified.
 
----
+- **Remaining CRUD and service-layer work**
+  - Institution CRUD and complaint CRUD routes are implemented.
+  - Institution normalized-name generation remains inline in `institutions.py`.
+  - A separate complaint CRUD service layer, bureau assignment/transfer APIs, relationship APIs, and coordination APIs remain to be implemented.
 
 ## 6. Remaining Deliverables
 
-1. Implement institution service layer with normalized name generation (API routes exist; service module missing).
-2. Implement complaint case service layer (CRUD API routes exist; service module missing).
-3. Implement complaint case event logging service hook and chronological timeline endpoint (`GET /api/v1/complaints/{id}/events`).
-4. Implement institution-specific complaint listing endpoint (`GET /api/v1/institutions/{id}/complaints`).
-5. Implement bureau management API routes and case assignment/transfer service.
-6. Implement case relationship API routes and AI overlap detection engine with similarity scoring.
-7. Implement human review workflow for relationship confirmation and dismissal.
-8. Implement cross-bureau coordination action queues and deadline escalation.
-9. Implement dashboard analytics, ageing calculations, and search endpoints.
+1. Implement the institution service layer with normalized name generation (institution CRUD routes exist; service abstraction remains pending).
+
+2. Implement a dedicated complaint CRUD service layer (complaint CRUD routes and lifecycle service are implemented; a separate CRUD service remains pending).
+
+3. Implement the institution-specific complaint listing endpoint (`GET /api/v1/institutions/{id}/complaints`).
+
+4. Implement bureau management APIs and the case assignment/transfer service, preserving assignment history and recording relevant lifecycle events.
+
+5. Implement case relationship APIs and the AI overlap detection engine with similarity scoring.
+
+6. Implement the human review workflow for relationship confirmation and dismissal, including explainability information.
+
+7. Implement cross-bureau coordination action queues and deadline escalation.
+
+8. Implement complaint search, filtering, sorting, and pagination capabilities not yet available.
+
+9. Implement dashboard analytics, KPI aggregation, and pending-case ageing calculations.
+
 10. Implement JWT authentication and role-based permissions.
-11. Create synthetic demo data seeding script.
-12. Integrate frontend dashboard application.
-13. Finalize SIH presentation walk-through materials.
+
+11. Create a synthetic demo data seeding script and reproducible demonstration scenarios.
+
+12. Integrate the frontend dashboard with the backend APIs.
+
+13. Prepare architecture diagrams, SIH presentation materials, and the judge demonstration walkthrough.
+
+**Completed in the current module:** Complaint lifecycle transition rules, `closed_at` management, event staging for complaint creation and status/priority changes, and the chronological case timeline endpoint. Automated tests passed; live PostgreSQL/Docker verification remains pending.
 
 ---
 
@@ -268,17 +295,27 @@
   - Created root `AGENTS.md` operating protocol and `progress.md` progress tracker.
   - Authored comprehensive directory documentation for all 13 project directories.
   - Implemented automated navigation validation tool `scripts/validate_navigation.py`.
-  - Added unit test suite in `backend/tests/` (7 passed — historical baseline; superseded by latest user-reported 120-test results).
+  - Added the initial unit test suite in `backend/tests/` (7 passed — historical baseline).
   - Validated health probe endpoints and database model metadata completeness.
+
 - **2026-10-21 (merge `6dd0d08` reconciliation):**
   - Verified Institution and Complaint Case CRUD API routes are implemented and mounted in `backend/app/api/v1/router.py`.
-  - Confirmed normalized-name generation lives inline in the API route layer (`_normalized_name` in `institutions.py`); `backend/app/services/` contains no service module.
-  - Updated `progress.md` Sections 2, 3, 4, 5, and 6 to reflect implemented endpoints and incomplete service layer.
-  - Qualified all test/validator evidence claims as "not re-executed after merge `6dd0d08`" (qualifications later superseded by user-reported results recorded in Sections 2, 4, and 8).
+  - Confirmed normalized-name generation remains inline in the institution API route (`_normalized_name` in `institutions.py`); a dedicated institution service layer remains pending.
+  - Reconciled project documentation with the implemented endpoints and remaining service-layer work.
   - Updated `backend/app/api/v1/v1.md` file inventory and directory tree to include `institutions.py` and `complaints.py`.
 
----
+- **2026-10-21 (Complaint Lifecycle & Event Timeline):**
+  - Implemented centralized complaint status-transition rules and `closed_at` lifecycle handling in `backend/app/services/case_lifecycle.py`.
+  - Added transactional event staging for complaint creation and status/priority changes.
+  - Added the `CaseEventRead` schema and `GET /api/v1/complaints/{case_id}/events` chronological timeline endpoint.
+  - Added lifecycle and event tests, and updated complaint endpoint regression tests.
+  - Fixed test helpers to capture staged events correctly and inspect compiled SQL bind parameters.
+  - Focused lifecycle/event/complaint endpoint suite: **107 passed, 217 warnings in 2.10s**.
+  - Full backend test suite: **191 passed, 313 warnings in 2.53s**.
+  - Navigation validation passed for all 13 directories; `git diff --check` passed.
+  - Live PostgreSQL/Docker verification remains pending.
 
+---
 ## 10. Final Submission Checklist
 
 - [ ] Complete end-to-end multi-bureau demonstration working smoothly.

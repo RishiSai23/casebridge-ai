@@ -8,6 +8,8 @@ The `backend/tests/` directory contains automated unit, integration, and contrac
 backend/tests/
 ├── __init__.py                   # Makes tests a Python package
 ├── test_bureau_schema.py         # Validates BureauCreate schema: uppercase/trimmed code, blank code/name rejected
+├── test_case_events.py           # Mocked timeline API and transactional event recording on complaint routes
+├── test_case_lifecycle.py        # Unit tests for status transitions, closed_at, and record_case_event
 ├── test_case_relationship_schema.py # Validates CaseRelationshipCreate: self-relationships and extra fields rejected
 ├── test_complaint_case_endpoints.py  # Mocked Complaint Case API endpoint tests (POST, GET list, GET by ID, PATCH)
 ├── test_complaint_case_schema.py   # Validates ComplaintCaseCreate/Update/Read/List schemas
@@ -23,8 +25,10 @@ backend/tests/
 |---|---|
 | `__init__.py` | Marks `tests` as a Python package. |
 | `test_bureau_schema.py` | Validates the `BureauCreate` Pydantic schema: bureau code is uppercased and trimmed, and blank or whitespace-only code/name values are rejected. |
+| `test_case_events.py` | Mocked tests for `GET /complaints/{case_id}/events` and event hooks on `POST`/`PATCH`: CREATED/STATUS_CHANGED/PRIORITY_CHANGED events, idempotent status/priority, rollback on IntegrityError, chronological ordering, 404/422, append-only (GET-only timeline route). |
+| `test_case_lifecycle.py` | Pure unit tests for `validate_status_transition`, `manage_closed_at`, `ALLOWED_TRANSITIONS` completeness, and `record_case_event` session staging. |
 | `test_case_relationship_schema.py` | Validates the `CaseRelationshipCreate` schema: valid relationship payloads succeed, self-relationships (same case on both sides) are rejected, and extra fields such as `confidence_score` are forbidden on creation. |
-| `test_complaint_case_endpoints.py` | Mocked endpoint tests for the Complaint Case API (`POST`, paginated/filtered `GET`, `GET` by ID, `PATCH`) covering 201/200/404/409/422 responses, `closed_at` transitions on close/reopen/withdraw, and integrity-conflict rollback, using a mocked async session with no live database. |
+| `test_complaint_case_endpoints.py` | Mocked endpoint tests for the Complaint Case API (`POST`, paginated/filtered `GET`, `GET` by ID, `PATCH`) covering 201/200/404/409/422 responses, invalid status transitions, `closed_at` transitions on close/reopen/withdraw, and integrity-conflict rollback, using a mocked async session with no live database. |
 | `test_complaint_case_schema.py` | Validates `ComplaintCaseCreate`, `ComplaintCaseUpdate`, `ComplaintCaseRead`, and `ComplaintCaseList`: subject/reference trimming, blank rejection, timezone-aware datetime enforcement, partial-update and explicit-null semantics, protected-field immutability, enum validation, and pagination bounds. |
 | `test_health.py` | Validates API liveness (`200 OK`). Readiness-probe degraded/ready reporting is covered deterministically by `test_health_endpoints.py` via mocked database connectivity. |
 | `test_institution_endpoints.py` | Mocked endpoint tests for the Institution API (`POST`, paginated/searched `GET`, `GET` by ID) covering 201/200/404/422 responses, case-insensitive `ILIKE` search, and duplicate-identifier conflicts, using a mocked async session with no live database. |
@@ -46,9 +50,9 @@ Run the test suite from `backend/`:
 ```powershell
 pytest -v
 ```
-Or run a specific test file:
+Or run lifecycle/event-focused tests:
 ```powershell
-pytest tests/test_health.py -v
+pytest tests/test_case_lifecycle.py tests/test_case_events.py tests/test_complaint_case_endpoints.py -v
 ```
 
 ## G. Maintenance notes

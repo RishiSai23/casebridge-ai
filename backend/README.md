@@ -37,12 +37,15 @@ backend/
 │   │       ├── case_relationship.py
 │   │       ├── coordination_action.py
 │   │       └── audit_log.py
-│   └── schemas/
-│       ├── health.py          # Health endpoint response models
-│       ├── institution.py
-│       ├── complaint_case.py
-│       ├── bureau.py
-│       └── case_relationship.py
+│   ├── schemas/
+│   │   ├── health.py          # Health endpoint response models
+│   │   ├── institution.py
+│   │   ├── complaint_case.py
+│   │   ├── case_event.py      # Case timeline read schema
+│   │   ├── bureau.py
+│   │   └── case_relationship.py
+│   └── services/
+│       └── case_lifecycle.py  # Status transition policy and CaseEvent recording
 └── tests/
 ```
 
@@ -296,7 +299,7 @@ Returns `503` when:
 |---|---|---|---|
 | Health | `/health` | Implemented | Liveness and readiness probes. |
 | Institutions | `/institutions` | Implemented | CRUD for institution registry (create, list with search/filter/pagination, get by ID). |
-| Complaints | `/complaints` | Implemented | CRUD for complaint cases (create, list with filter/pagination, get by ID, PATCH partial update; `closed_at` is set/cleared on transitions to/from terminal statuses such as `closed`/`withdrawn` — no enforced full status-transition state machine). |
+| Complaints | `/complaints` | Implemented (lifecycle/events awaiting manual verification) | CRUD plus enforced status-transition policy (`app/services/case_lifecycle.py`), transactional append-only `CaseEvent` logging on create/PATCH, and `GET /complaints/{case_id}/events` chronological timeline. |
 | Bureaus | `/bureaus` | Planned | Bureau management. |
 | Relationships | `/relationships` | Planned | Case overlap detection and review. |
 | Coordination | `/coordination` | Planned | Cross-bureau action queue. |

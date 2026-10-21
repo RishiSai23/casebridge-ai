@@ -21,8 +21,14 @@ PATCH /api/v1/complaints/{case_id}
     Partially update a complaint case.  Only explicitly provided fields are
     mutated.  ``case_reference``, ``institution_id``, ``received_at``,
     ``closed_at`` and timestamps cannot be changed through this endpoint.
+    Status changes are validated by
+    :mod:`app.services.case_lifecycle` (invalid transitions → HTTP 422).
     Transitioning to ``closed``/``withdrawn`` sets ``closed_at``; transitioning
-    from a terminal status to a non-terminal one clears it.
+    from a terminal status to a non-terminal one clears it.  Accepted status
+    and priority changes append ``CaseEvent`` rows in the same transaction.
+
+GET /api/v1/complaints/{case_id}/events
+    Chronological, append-only case timeline (oldest first; ``id`` tie-breaker).
 
 Database and error handling
 ---------------------------
@@ -49,17 +55,24 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
+from app.db.models.case_event import CaseEvent
 from app.db.models.complaint_case import ComplaintCase
 from app.db.models.institution import Institution
-from app.db.models.enums import CasePriority, CaseStatus
+from app.db.models.enums import CaseEventType, CasePriority, CaseStatus
+from app.schemas.case_event import CaseEventRead
 from app.schemas.complaint_case import (
     ComplaintCaseCreate,
     ComplaintCaseList,
     ComplaintCaseRead,
     ComplaintCaseUpdate,
 )
+from app.services.case_lifecycle import (
+    manage_closed_at,
+    record_case_event,
+    validate_status_transition,
+)
 
-
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/complaints", tags=["Complaints"])
 
@@ -111,11 +124,22 @@ async def create_complaint_case(
         closed_at=None,
     )
     db.add(case)
+
+    # Record the initial creation event in the same transaction so that a
+    # failed commit rolls both the case and the event back together.
+    record_case_event(
+        db,
+        case,
+        CaseEventType.CREATED,
+        "Complaint case created.",
+    )
+
     try:
         await db.commit()
     except IntegrityError:
         # Unique constraint on case_reference is violated.
         # Roll back so the session can be reused, then report a clean 409.
+        # The CREATED event is rolled back along with the case row.
         await db.rollback()
         logger.warning("Duplicate complaint case reference rejected")
         raise HTTPException(
@@ -132,10 +156,6 @@ async def create_complaint_case(
 
 DEFAULT_LIMIT = 20
 MAX_LIMIT = 100
-
-TERMINAL_STATUSES = {CaseStatus.CLOSED, CaseStatus.WITHDRAWN}
-
-logger = logging.getLogger(__name__)
 
 
 @router.get(
@@ -266,7 +286,14 @@ async def update_complaint_case(
     payload: ComplaintCaseUpdate = ...,
     db: AsyncSession = Depends(get_db),
 ) -> ComplaintCaseRead:
-    """Partially update and persist an existing ComplaintCase row."""
+    """Partially update and persist an existing ComplaintCase row.
+
+    Status transitions are validated centrally via
+    :func:`app.services.case_lifecycle.validate_status_transition`; invalid
+    transitions are rejected with HTTP 422.  All accepted mutations and any
+    corresponding case events are committed atomically — a failure rolls
+    both back.
+    """
     result = await db.execute(
         select(ComplaintCase).where(ComplaintCase.id == case_id)
     )
@@ -281,18 +308,52 @@ async def update_complaint_case(
     # The schema validator rejects an empty payload, so update_data is
     # guaranteed non-empty here.
 
-    # Manage closed_at in domain logic based on status transitions.
-    if "status" in update_data:
-        new_status = update_data["status"]
-        was_terminal = case.status in TERMINAL_STATUSES
-        if new_status in TERMINAL_STATUSES and not was_terminal:
-            case.closed_at = datetime.now(timezone.utc)
-        elif new_status not in TERMINAL_STATUSES and was_terminal:
-            case.closed_at = None
-        # Otherwise preserve the existing closed_at.
+    # Capture pre-mutation values for event recording and transition checks.
+    old_status = case.status
+    old_priority = case.priority
+    new_status = update_data.get("status")
 
+    # Validate the status transition before mutating anything.
+    if new_status is not None and new_status != old_status:
+        try:
+            validate_status_transition(old_status, new_status)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            )
+
+    # Manage closed_at based on terminal-status transitions.
+    manage_closed_at(case, new_status)
+
+    # Apply all field updates (status included if present).
     for field, value in update_data.items():
         setattr(case, field, value)
+
+    # Record lifecycle events for meaningful changes, before commit so the
+    # event and the case mutation share the same transaction.
+    if new_status is not None and new_status != old_status:
+        record_case_event(
+            db,
+            case,
+            CaseEventType.STATUS_CHANGED,
+            f"Status changed from '{old_status.value}' to '{new_status.value}'.",
+            event_metadata={
+                "old_status": old_status.value,
+                "new_status": new_status.value,
+            },
+        )
+    if "priority" in update_data and update_data["priority"] != old_priority:
+        record_case_event(
+            db,
+            case,
+            CaseEventType.PRIORITY_CHANGED,
+            f"Priority changed from '{old_priority.value}' to '{case.priority.value}'.",
+            event_metadata={
+                "old_priority": old_priority.value,
+                "new_priority": case.priority.value,
+            },
+        )
 
     try:
         await db.commit()
@@ -305,3 +366,52 @@ async def update_complaint_case(
         )
     await db.refresh(case)
     return case
+
+
+@router.get(
+    "/{case_id}/events",
+    response_model=list[CaseEventRead],
+    summary="List case events in chronological order",
+    description=(
+        "Return all events for a complaint case, ordered chronologically "
+        "by ``occurred_at`` with ``id`` as a stable tie-breaker when "
+        "timestamps match.  Returns an empty collection when the case "
+        "exists but has no events."
+    ),
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "Complaint case not found."},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "``case_id`` is not a valid UUID."
+        },
+    },
+)
+async def list_case_events(
+    case_id: UUID = Path(..., description="UUID of the complaint case."),
+    db: AsyncSession = Depends(get_db),
+) -> list[CaseEventRead]:
+    """Return all events for a case, oldest first.
+
+    Validates that the case exists (HTTP 404 otherwise) and returns only
+    events belonging to that case.  No relationship loading is performed,
+    avoiding N+1 queries.
+    """
+    # Validate the case exists before returning its events.
+    result = await db.execute(
+        select(ComplaintCase).where(ComplaintCase.id == case_id)
+    )
+    if result.scalars().first() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint case not found.",
+        )
+
+    # Fetch events for this case only, chronologically ordered.
+    # Secondary sort by id guarantees deterministic ordering when
+    # occurred_at values are identical.
+    result = await db.execute(
+        select(CaseEvent)
+        .where(CaseEvent.case_id == case_id)
+        .order_by(CaseEvent.occurred_at.asc(), CaseEvent.id.asc())
+    )
+    events = result.scalars().all()
+    return list(events)

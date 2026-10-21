@@ -143,10 +143,18 @@ def _make_case(
 
 
 def _captured_instance(mock_session: AsyncMock) -> dict:
-    """Return a dict that capture() populates with the object passed to db.add."""
+    """Return a dict populated with every object passed to db.add (in order)."""
     captured: dict = {}
-    mock_session.add.side_effect = lambda obj: captured.setdefault("obj", obj)
+    mock_session.add.side_effect = lambda obj: captured.setdefault("objs", []).append(obj)
     return captured
+
+
+def _captured_case(captured: dict) -> ComplaintCase:
+    """Return the ComplaintCase staged on the session (ignores CaseEvent rows)."""
+    for obj in captured.get("objs", []):
+        if isinstance(obj, ComplaintCase):
+            return obj
+    raise AssertionError("No ComplaintCase was passed to db.add")
 
 
 def _server_side_refresh(mock_session: AsyncMock) -> None:
@@ -199,7 +207,7 @@ def test_create_complaint_case_returns_201(client, mock_session):
     assert body["created_at"]
     assert body["updated_at"]
 
-    stored = captured["obj"]
+    stored = _captured_case(captured)
     assert stored.case_reference == "AICTE-PGRS-2026-000001"
     assert stored.status == CaseStatus.OPEN
     assert stored.closed_at is None
@@ -229,7 +237,7 @@ def test_create_complaint_case_ignores_client_supplied_server_fields(
     response = client.post("/api/v1/complaints", json=payload)
 
     assert response.status_code == 201
-    stored = captured["obj"]
+    stored = _captured_case(captured)
     assert stored.status == CaseStatus.OPEN
     assert stored.closed_at is None
 
@@ -312,8 +320,8 @@ def test_create_complaint_case_duplicate_reference_returns_409(client, mock_sess
     body_text = response.text
     assert "duplicate key" not in body_text
     assert "statement" not in body_text
-    # db.add() is invoked before commit, so the instance was staged.
-    mock_session.add.assert_called_once()
+    # db.add() stages the case and its CREATED event before commit.
+    assert mock_session.add.call_count == 2
     mock_session.rollback.assert_awaited_once()
     mock_session.commit.assert_awaited_once()
 
@@ -623,6 +631,7 @@ def test_patch_complaint_case_protected_fields_rejected(client, mock_session):
             "case_reference": "AICTE-PGRS-999999",
             "institution_id": str(uuid4()),
             "received_at": _STAMP.isoformat(),
+            "closed_at": _STAMP.isoformat(),
         },
     )
 
@@ -715,6 +724,24 @@ def test_patch_complaint_case_reopening_clears_closed_at(client, mock_session):
 
     assert response.status_code == 200
     assert case.closed_at is None
+
+
+def test_patch_complaint_case_invalid_status_transition_returns_422(
+    client, mock_session,
+):
+    """Disallowed status transitions (e.g. closed → under_review) return HTTP 422."""
+    case = _make_case(status=CaseStatus.CLOSED, closed_at=_STAMP)
+    result = MagicMock()
+    result.scalars.return_value.first.return_value = case
+    mock_session.execute.return_value = result
+
+    response = client.patch(
+        f"/api/v1/complaints/{case.id}", json={"status": "under_review"}
+    )
+
+    assert response.status_code == 422
+    assert "Invalid status transition" in response.json()["detail"]
+    mock_session.commit.assert_not_awaited()
 
 
 def test_patch_complaint_case_other_update_preserves_closed_at(
