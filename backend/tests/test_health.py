@@ -1,10 +1,15 @@
 """
 Unit tests for API health endpoints.
+
+Readiness-probe behaviour (degraded/ready when the database is unreachable,
+reachable, or unconfigured) is covered deterministically in
+``test_health_endpoints.py`` by mocking ``app.api.v1.health.get_engine``.  This
+file therefore retains only the liveness probe, which never touches the
+database.
 """
 
 from fastapi.testclient import TestClient
 
-from app.core.config import get_settings
 from app.main import app
 
 client = TestClient(app)
@@ -20,20 +25,3 @@ def test_health_liveness() -> None:
     assert "version" in data
     assert "environment" in data
     assert "timestamp" in data
-
-
-def test_health_readiness_no_database() -> None:
-    """Test GET /api/v1/health/ready reports degraded when DATABASE_URL is empty."""
-    settings = get_settings()
-    # If DATABASE_URL is empty in test environment, expect degraded 503
-    if not settings.DATABASE_URL:
-        response = client.get("/api/v1/health/ready")
-        assert response.status_code == 503
-        data = response.json()
-        assert data["status"] == "degraded"
-        assert "database" in data["checks"]
-    else:
-        response = client.get("/api/v1/health/ready")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ready"

@@ -9,6 +9,7 @@ backend/
 ├── .env.example           # Example environment variable file for local development
 ├── alembic.ini            # Alembic database migration tool configuration
 ├── backend.md             # Navigation documentation for the backend directory
+├── migration_preview.sql  # SQL DDL preview of the initial Alembic migration (revision 2f4e9a1b8c72)
 ├── README.md              # Backend setup guide, architecture notes, and API documentation
 ├── requirements.txt       # Direct Python dependencies with pinned minor versions
 ├── alembic/               # Database migrations, environment runner, and version scripts
@@ -36,6 +37,7 @@ backend/
 | `.env.example` | Template environment configuration file specifying database URL, CORS origins, and AI matching parameters. |
 | `alembic.ini` | Global configuration file for Alembic database migrations. |
 | `backend.md` | Documents the backend component structure, dependencies, workflows, and navigation. |
+| `migration_preview.sql` | SQL DDL preview of the initial Alembic migration (`alembic upgrade head --sql`) for revision `2f4e9a1b8c72`: `BEGIN;`/`COMMIT;`-wrapped `CREATE TABLE` statements for all domain tables with indexes (including partial unique indexes), column comments, and check constraints, ending with an `INSERT` seeding `alembic_version` with revision `2f4e9a1b8c72`. |
 | `README.md` | Detailed architectural documentation, design decisions, entity relationships, and setup commands. |
 | `requirements.txt` | Lists direct Python dependencies (FastAPI, SQLAlchemy, asyncpg, Alembic, Pydantic, etc.) pinned by minor version. |
 

@@ -290,13 +290,14 @@ Returns `503` when:
 
 ---
 
-## Planned future modules (Task 3+)
+## API Module Status
 
-| Module | Prefix | Responsibility |
-|---|---|---|
-| Institutions | `/institutions` | CRUD for institution registry |
-| Complaints | `/complaints` | CRUD for complaint cases |
-| Bureaus | `/bureaus` | Bureau management |
-| Relationships | `/relationships` | Case overlap detection and review |
-| Coordination | `/coordination` | Cross-bureau action queue |
-| Audit | `/audit` | Action history |
+| Module | Prefix | Status | Responsibility |
+|---|---|---|---|
+| Health | `/health` | Implemented | Liveness and readiness probes. |
+| Institutions | `/institutions` | Implemented | CRUD for institution registry (create, list with search/filter/pagination, get by ID). |
+| Complaints | `/complaints` | Implemented | CRUD for complaint cases (create, list with filter/pagination, get by ID, PATCH partial update; `closed_at` is set/cleared on transitions to/from terminal statuses such as `closed`/`withdrawn` — no enforced full status-transition state machine). |
+| Bureaus | `/bureaus` | Planned | Bureau management. |
+| Relationships | `/relationships` | Planned | Case overlap detection and review. |
+| Coordination | `/coordination` | Planned | Cross-bureau action queue. |
+| Audit | `/audit` | Planned | Action history. |
